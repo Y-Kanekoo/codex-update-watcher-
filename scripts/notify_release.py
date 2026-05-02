@@ -48,8 +48,21 @@ def post_discord(webhook: str, release: dict) -> None:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req) as resp:
-        resp.read()
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp.read()
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        # URL本体は出力しない。長さと先頭スキームのみで secret 破損を判定する
+        print(
+            f"Discord rejected: HTTP {e.code} body={err_body}",
+            file=sys.stderr,
+        )
+        print(
+            f"webhook_len={len(webhook)} starts_https={webhook.startswith('https://')}",
+            file=sys.stderr,
+        )
+        raise
 
 
 def main() -> int:
