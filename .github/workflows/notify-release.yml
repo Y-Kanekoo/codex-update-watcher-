@@ -40,9 +40,6 @@ jobs:
             git push
           fi
 
-      - name: TEMP force fail
-        run: exit 1
-
       - name: Notify failure to Discord
         if: failure()
         env:
