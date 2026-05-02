@@ -34,7 +34,17 @@ jobs:
           if [ -n "$(git status --porcelain state/)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            TAG=$(cat state/last_release.txt)
             git add state/
-            git commit -m "chore: update last release state"
+            git commit -m "[ops] last_release を ${TAG} に更新"
             git push
           fi
+
+      - name: Notify failure to Discord
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          PAYLOAD=$(printf '{"content":"⚠️ codex-update-watcher の workflow が失敗しました\\n%s"}' "$RUN_URL")
+          curl -sS -X POST -H 'Content-Type: application/json' -A 'codex-update-watcher' -d "$PAYLOAD" "$WEBHOOK" || true
