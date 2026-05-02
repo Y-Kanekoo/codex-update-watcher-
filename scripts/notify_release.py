@@ -72,7 +72,7 @@ def select_unnotified(releases: list[dict], last_tag: str) -> list[dict]:
     return []
 
 
-def post_discord(webhook: str, release: dict) -> None:
+def build_payload(release: dict) -> dict:
     body = (release.get("body") or "(release notes なし)").strip()
     if len(body) > DISCORD_BODY_LIMIT:
         body = body[:DISCORD_BODY_LIMIT] + "\n... (truncated)"
@@ -86,7 +86,11 @@ def post_discord(webhook: str, release: dict) -> None:
     published_at = release.get("published_at")
     if published_at:
         embed["timestamp"] = published_at
-    payload = {"embeds": [embed]}
+    return {"embeds": [embed]}
+
+
+def post_discord(webhook: str, release: dict) -> None:
+    payload = build_payload(release)
     req = urllib.request.Request(
         webhook,
         data=json.dumps(payload).encode(),
