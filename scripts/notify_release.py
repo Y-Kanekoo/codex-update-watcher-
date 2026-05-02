@@ -45,7 +45,11 @@ def post_discord(webhook: str, release: dict) -> None:
     req = urllib.request.Request(
         webhook,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            # Cloudflare がデフォルト Python-urllib UA を error 1010 で弾くため明示
+            "User-Agent": "codex-update-watcher",
+        },
         method="POST",
     )
     try:
