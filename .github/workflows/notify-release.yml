@@ -15,6 +15,9 @@ concurrency:
 jobs:
   notify:
     runs-on: ubuntu-latest
+    env:
+      # 2026-06 強制移行までに Node 24 で動作確認するため前倒し
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
 
