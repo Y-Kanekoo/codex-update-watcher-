@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
+    inputs:
+      watch_repo:
+        description: '監視対象 repo (owner/repo)。空なら openai/codex'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -27,7 +32,7 @@ jobs:
 
       - name: Run notifier
         env:
-          WATCH_REPO: openai/codex
+          WATCH_REPO: ${{ inputs.watch_repo != '' && inputs.watch_repo || 'openai/codex' }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/notify_release.py
