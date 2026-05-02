@@ -76,15 +76,17 @@ def post_discord(webhook: str, release: dict) -> None:
     body = (release.get("body") or "(release notes なし)").strip()
     if len(body) > DISCORD_BODY_LIMIT:
         body = body[:DISCORD_BODY_LIMIT] + "\n... (truncated)"
-    payload = {
-        "embeds": [
-            {
-                "title": f"{REPO} {release['tag_name']} がリリースされました",
-                "url": release["html_url"],
-                "description": body,
-            }
-        ]
+    embed: dict = {
+        "title": f"{REPO} {release['tag_name']} がリリースされました",
+        "url": release["html_url"],
+        "description": body,
+        "color": 0x4F46E5,
+        "footer": {"text": "codex-update-watcher"},
     }
+    published_at = release.get("published_at")
+    if published_at:
+        embed["timestamp"] = published_at
+    payload = {"embeds": [embed]}
     req = urllib.request.Request(
         webhook,
         data=json.dumps(payload).encode(),
