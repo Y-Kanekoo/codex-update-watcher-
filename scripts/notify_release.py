@@ -14,6 +14,9 @@ REPO = os.environ.get("WATCH_REPO", "openai/codex")
 STATE_FILE = Path(os.environ.get("STATE_FILE", "state/last_release.txt"))
 DISCORD_BODY_LIMIT = 1800
 RETRY_STATUS = {429, 500, 502, 503, 504}
+RELEASES_PER_PAGE = 20
+# state より古い tag が見つからない場合の暴発防止上限
+CATCH_UP_CAP = 5
 
 
 def _urlopen_with_retry(req, retries: int = 2, backoff: float = 1.0):
@@ -33,9 +36,10 @@ def _urlopen_with_retry(req, retries: int = 2, backoff: float = 1.0):
             raise
 
 
-def fetch_latest_release() -> dict:
+def fetch_releases(per_page: int = RELEASES_PER_PAGE) -> list[dict]:
+    """新しい順に release 一覧を取得。draft / prerelease は除外"""
     req = urllib.request.Request(
-        f"https://api.github.com/repos/{REPO}/releases/latest",
+        f"https://api.github.com/repos/{REPO}/releases?per_page={per_page}",
         headers={
             "Accept": "application/vnd.github+json",
             "User-Agent": "codex-update-watcher",
@@ -45,7 +49,27 @@ def fetch_latest_release() -> dict:
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     with _urlopen_with_retry(req) as resp:
-        return json.loads(resp.read())
+        data = json.loads(resp.read())
+    return [r for r in data if not r.get("draft") and not r.get("prerelease")]
+
+
+def select_unnotified(releases: list[dict], last_tag: str) -> list[dict]:
+    """last_tag より新しい release を新しい順で返す。
+    last_tag が見つからない場合は最新 1件のみに絞り、暴発を防ぐ。
+    """
+    new_releases: list[dict] = []
+    for r in releases:
+        if r["tag_name"] == last_tag:
+            return new_releases
+        new_releases.append(r)
+    # last_tag が範囲外（page から漏れている）→ 最新 1 件のみ
+    if new_releases:
+        print(
+            f"warning: {last_tag} が直近 {len(releases)} 件に見つからず。最新のみ通知",
+            file=sys.stderr,
+        )
+        return new_releases[:1]
+    return []
 
 
 def post_discord(webhook: str, release: dict) -> None:
@@ -95,30 +119,46 @@ def main() -> int:
         return 1
 
     try:
-        release = fetch_latest_release()
+        releases = fetch_releases()
     except urllib.error.HTTPError as e:
         if e.code == 404:
             print(f"{REPO} has no releases yet")
             return 0
         raise
 
-    tag = release["tag_name"]
+    if not releases:
+        print(f"{REPO} has no stable releases yet")
+        return 0
+
+    latest = releases[0]
     last = STATE_FILE.read_text().strip() if STATE_FILE.exists() else ""
 
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     if not last:
-        STATE_FILE.write_text(tag + "\n")
-        print(f"Initialized state without notifying: {tag}")
+        STATE_FILE.write_text(latest["tag_name"] + "\n")
+        print(f"Initialized state without notifying: {latest['tag_name']}")
         return 0
 
-    if tag == last:
-        print(f"No new release (current: {tag})")
+    if latest["tag_name"] == last:
+        print(f"No new release (current: {last})")
         return 0
 
-    post_discord(webhook, release)
-    STATE_FILE.write_text(tag + "\n")
-    print(f"Notified: {tag}")
+    new_releases = select_unnotified(releases, last)
+    if len(new_releases) > CATCH_UP_CAP:
+        print(
+            f"warning: 未通知 {len(new_releases)} 件 → 上限 {CATCH_UP_CAP} 件に制限",
+            file=sys.stderr,
+        )
+        new_releases = new_releases[:CATCH_UP_CAP]
+
+    # 新しい順 → 古い順に並べ替えて時系列で投稿
+    for release in reversed(new_releases):
+        post_discord(webhook, release)
+
+    STATE_FILE.write_text(latest["tag_name"] + "\n")
+    tags = ", ".join(r["tag_name"] for r in reversed(new_releases))
+    print(f"Notified {len(new_releases)} release(s): {tags}")
     return 0
 
 
