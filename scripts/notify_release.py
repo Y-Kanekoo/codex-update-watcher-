@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -12,6 +13,24 @@ from pathlib import Path
 REPO = os.environ.get("WATCH_REPO", "openai/codex")
 STATE_FILE = Path(os.environ.get("STATE_FILE", "state/last_release.txt"))
 DISCORD_BODY_LIMIT = 1800
+RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+def _urlopen_with_retry(req, retries: int = 2, backoff: float = 1.0):
+    """指数バックオフ付きで urlopen。一過性 (429/5xx/network) のみ retry"""
+    for attempt in range(retries + 1):
+        try:
+            return urllib.request.urlopen(req)
+        except urllib.error.HTTPError as e:
+            if e.code in RETRY_STATUS and attempt < retries:
+                time.sleep(backoff * (2 ** attempt))
+                continue
+            raise
+        except urllib.error.URLError:
+            if attempt < retries:
+                time.sleep(backoff * (2 ** attempt))
+                continue
+            raise
 
 
 def fetch_latest_release() -> dict:
@@ -25,7 +44,7 @@ def fetch_latest_release() -> dict:
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(req) as resp:
+    with _urlopen_with_retry(req) as resp:
         return json.loads(resp.read())
 
 
@@ -53,7 +72,7 @@ def post_discord(webhook: str, release: dict) -> None:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req) as resp:
+        with _urlopen_with_retry(req) as resp:
             resp.read()
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8", errors="replace")
