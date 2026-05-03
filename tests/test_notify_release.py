@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import sys
 import unittest
+import urllib.error
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -67,6 +69,61 @@ class SelectUnnotifiedTests(unittest.TestCase):
     def test_empty_when_releases_empty(self):
         result = notify_release.select_unnotified([], last_tag="v0")
         self.assertEqual(result, [])
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        url="https://example.com", code=code, msg="x", hdrs=None, fp=None
+    )
+
+
+class UrlopenWithRetryTests(unittest.TestCase):
+    def setUp(self):
+        # sleep を mock してテストを高速化
+        self._sleep_patcher = patch.object(notify_release.time, "sleep")
+        self.mock_sleep = self._sleep_patcher.start()
+
+    def tearDown(self):
+        self._sleep_patcher.stop()
+
+    def test_succeeds_on_first_attempt(self):
+        with patch.object(notify_release.urllib.request, "urlopen", return_value="ok") as mock:
+            result = notify_release._urlopen_with_retry("req", retries=2)
+        self.assertEqual(result, "ok")
+        self.assertEqual(mock.call_count, 1)
+        self.mock_sleep.assert_not_called()
+
+    def test_retries_on_503_then_succeeds(self):
+        side_effects = [_http_error(503), "ok"]
+        with patch.object(notify_release.urllib.request, "urlopen", side_effect=side_effects) as mock:
+            result = notify_release._urlopen_with_retry("req", retries=2, backoff=1.0)
+        self.assertEqual(result, "ok")
+        self.assertEqual(mock.call_count, 2)
+        self.mock_sleep.assert_called_once_with(1.0)
+
+    def test_does_not_retry_on_404(self):
+        with patch.object(notify_release.urllib.request, "urlopen", side_effect=_http_error(404)) as mock:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                notify_release._urlopen_with_retry("req", retries=2)
+        self.assertEqual(ctx.exception.code, 404)
+        self.assertEqual(mock.call_count, 1)
+        self.mock_sleep.assert_not_called()
+
+    def test_retries_exhausted_raises_last_error(self):
+        with patch.object(notify_release.urllib.request, "urlopen", side_effect=_http_error(500)) as mock:
+            with self.assertRaises(urllib.error.HTTPError):
+                notify_release._urlopen_with_retry("req", retries=2, backoff=1.0)
+        self.assertEqual(mock.call_count, 3)
+        # backoff = 1.0 * 2**0, 1.0 * 2**1
+        self.assertEqual(self.mock_sleep.call_args_list[0].args, (1.0,))
+        self.assertEqual(self.mock_sleep.call_args_list[1].args, (2.0,))
+
+    def test_retries_on_url_error(self):
+        side_effects = [urllib.error.URLError("netfail"), urllib.error.URLError("netfail"), "ok"]
+        with patch.object(notify_release.urllib.request, "urlopen", side_effect=side_effects) as mock:
+            result = notify_release._urlopen_with_retry("req", retries=2, backoff=0.5)
+        self.assertEqual(result, "ok")
+        self.assertEqual(mock.call_count, 3)
 
 
 if __name__ == "__main__":
