@@ -11,7 +11,9 @@ import urllib.request
 from pathlib import Path
 
 REPO = os.environ.get("WATCH_REPO", "openai/codex")
-STATE_FILE = Path(os.environ.get("STATE_FILE", "state/last_release.txt"))
+# repo 別に state を分離することで watch_repo 切替時の state 衝突を防ぐ
+_DEFAULT_STATE = f"state/{REPO.replace('/', '__')}.txt"
+STATE_FILE = Path(os.environ.get("STATE_FILE", _DEFAULT_STATE))
 DISCORD_BODY_LIMIT = 1800
 RETRY_STATUS = {429, 500, 502, 503, 504}
 RELEASES_PER_PAGE = 20
