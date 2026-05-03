@@ -24,7 +24,7 @@ jobs:
       # 2026-06 強制移行までに Node 24 で動作確認するため前倒し
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5
         with:
