@@ -23,8 +23,6 @@ def _release(tag: str, body: str = "notes", published_at: str | None = "2026-01-
 
 class BuildPayloadTests(unittest.TestCase):
     def test_basic_shape(self):
-        # TEMP: revert予定 - test workflow 失敗通知の e2e 検証用
-        self.fail("TEMP e2e check")
         payload = notify_release.build_payload(_release("v1.0.0", body="hello"))
         self.assertEqual(len(payload["embeds"]), 1)
         embed = payload["embeds"][0]
