@@ -18,3 +18,12 @@ jobs:
           python-version: "3.12"
       - name: Run unittest
         run: python -m unittest discover tests -v
+
+      - name: Notify failure to Discord (main only)
+        if: failure() && github.ref == 'refs/heads/main'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          PAYLOAD=$(printf '{"content":"⚠️ codex-update-watcher の test workflow が main で失敗しました\\n%s"}' "$RUN_URL")
+          curl -sS -X POST -H 'Content-Type: application/json' -A 'codex-update-watcher' -d "$PAYLOAD" "$WEBHOOK" || true
