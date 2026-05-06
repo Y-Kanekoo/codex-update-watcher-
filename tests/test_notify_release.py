@@ -126,5 +126,36 @@ class UrlopenWithRetryTests(unittest.TestCase):
         self.assertEqual(mock.call_count, 3)
 
 
+class PostDiscordMessageTests(unittest.TestCase):
+    def test_sends_plain_content_payload(self):
+        captured = {}
+
+        class _Resp:
+            def read(self):
+                return b""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def _capture(req):
+            captured["url"] = req.full_url
+            captured["data"] = req.data
+            captured["ua"] = req.get_header("User-agent")
+            captured["ct"] = req.get_header("Content-type")
+            return _Resp()
+
+        with patch.object(notify_release.urllib.request, "urlopen", side_effect=_capture):
+            notify_release.post_discord_message("https://example.com/wh", "hello")
+
+        import json as _json
+        self.assertEqual(_json.loads(captured["data"].decode()), {"content": "hello"})
+        self.assertEqual(captured["url"], "https://example.com/wh")
+        self.assertEqual(captured["ua"], "codex-update-watcher")
+        self.assertEqual(captured["ct"], "application/json")
+
+
 if __name__ == "__main__":
     unittest.main()

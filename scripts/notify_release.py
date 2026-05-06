@@ -91,8 +91,7 @@ def build_payload(release: dict) -> dict:
     return {"embeds": [embed]}
 
 
-def post_discord(webhook: str, release: dict) -> None:
-    payload = build_payload(release)
+def _post_payload(webhook: str, payload: dict) -> None:
     req = urllib.request.Request(
         webhook,
         data=json.dumps(payload).encode(),
@@ -118,6 +117,15 @@ def post_discord(webhook: str, release: dict) -> None:
             file=sys.stderr,
         )
         raise
+
+
+def post_discord(webhook: str, release: dict) -> None:
+    _post_payload(webhook, build_payload(release))
+
+
+def post_discord_message(webhook: str, content: str) -> None:
+    """plain text の Discord メッセージを送る (CAP 超過警告などに使用)"""
+    _post_payload(webhook, {"content": content})
 
 
 def main() -> int:
@@ -154,9 +162,16 @@ def main() -> int:
 
     new_releases = select_unnotified(releases, last)
     if len(new_releases) > CATCH_UP_CAP:
+        total = len(new_releases)
+        dropped = total - CATCH_UP_CAP
         print(
-            f"warning: 未通知 {len(new_releases)} 件 → 上限 {CATCH_UP_CAP} 件に制限",
+            f"warning: 未通知 {total} 件 → 上限 {CATCH_UP_CAP} 件に制限",
             file=sys.stderr,
+        )
+        post_discord_message(
+            webhook,
+            f"⚠️ {REPO} で {total} 件のリリースを検知しましたが、上限 {CATCH_UP_CAP} 件のみ通知します。"
+            f"古い {dropped} 件は GitHub の releases ページで手動確認してください。",
         )
         new_releases = new_releases[:CATCH_UP_CAP]
 
