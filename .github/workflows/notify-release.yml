@@ -2,7 +2,8 @@ name: notify-release
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    # 毎時0分・30分の混雑を避け、GitHub側の遅延・取りこぼしを減らす
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       watch_repo:
@@ -26,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
